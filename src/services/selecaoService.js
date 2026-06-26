@@ -1,0 +1,348 @@
+import { apiGet } from './footballData.js';
+import { apiSportsGet } from './apiSports.js';
+import { config, CACHE_TTL } from '../config.js';
+import * as mock from './mockData.js';
+
+const { worldCupCode, worldCupId } = config;
+
+// Tenta a API real. Cai no mock quando: sem chave (DEMO_MODE), recurso restrito ao
+// plano (PLAN_LIMIT) ou limite de req/min (RATE_LIMIT). Assim o site nunca quebra.
+async function withDemoFallback(realCall, mockFactory) {
+  try {
+    return await realCall();
+  } catch (err) {
+    if (['DEMO_MODE', 'PLAN_LIMIT', 'RATE_LIMIT'].includes(err.code) || err.message === 'DEMO_MODE') {
+      if (err.message !== 'DEMO_MODE' && err.code !== 'DEMO_MODE') {
+        console.warn(`[fallback] usando dados demo: ${err.message}`);
+      }
+      return { fonte: 'demo', ...mockFactory() };
+    }
+    throw err;
+  }
+}
+
+// ---------- helpers ----------
+
+// Nomes de seleções em português (fallback: nome original da API).
+const NOMES_PT = {
+  Brazil: 'Brasil', Argentina: 'Argentina', France: 'França', Croatia: 'Croácia',
+  Serbia: 'Sérvia', Cameroon: 'Camarões', Germany: 'Alemanha', Spain: 'Espanha',
+  Portugal: 'Portugal', England: 'Inglaterra', 'South Korea': 'Coreia do Sul',
+  Japan: 'Japão', Mexico: 'México', 'United States': 'Estados Unidos', Canada: 'Canadá',
+  Netherlands: 'Holanda', Belgium: 'Bélgica', Italy: 'Itália', Uruguay: 'Uruguai',
+  Colombia: 'Colômbia', Switzerland: 'Suíça', Morocco: 'Marrocos', Senegal: 'Senegal',
+  Ecuador: 'Equador', Paraguay: 'Paraguai', Chile: 'Chile', Peru: 'Peru',
+};
+const ptNome = (time) => NOMES_PT[time?.name] ?? time?.name ?? '—';
+
+const STAGE_PT = {
+  GROUP_STAGE: 'Fase de grupos', LAST_32: '16-avos de final', LAST_16: 'Oitavas de final',
+  QUARTER_FINALS: 'Quartas de final', SEMI_FINALS: 'Semifinal', FINAL: 'Final',
+  THIRD_PLACE: 'Disputa de 3º lugar', PRELIMINARY_ROUND: 'Preliminar', PLAYOFFS: 'Playoffs',
+};
+function faseLabel(m) {
+  if (m.group) return m.group.replace('GROUP_', 'Grupo ');
+  return STAGE_PT[m.stage] ?? m.stage ?? '';
+}
+
+const STATUS_MAP = { SCHEDULED: 'NS', TIMED: 'NS', IN_PLAY: 'LIVE', PAUSED: 'HT', FINISHED: 'FT' };
+const STATUS_DESC = { NS: 'A jogar', LIVE: 'Ao vivo', HT: 'Intervalo', FT: 'Encerrado' };
+const mapStatus = (s) => STATUS_MAP[s] ?? s;
+
+// normaliza nome p/ casar entre as duas APIs (tira acento, minúsculas)
+const normalizar = (s) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+
+function posPT(pos) {
+  if (!pos) return '';
+  if (/goal/i.test(pos)) return 'Goleiro';
+  if (/back|defen/i.test(pos)) return 'Defensor';
+  if (/midfield/i.test(pos)) return 'Meio-campo';
+  if (/wing|forward|strik|offen|attack/i.test(pos)) return 'Atacante';
+  return pos;
+}
+
+function idade(dob) {
+  if (!dob) return null;
+  const nasc = new Date(dob);
+  const hoje = new Date();
+  let i = hoje.getFullYear() - nasc.getFullYear();
+  const m = hoje.getMonth() - nasc.getMonth();
+  if (m < 0 || (m === 0 && hoje.getDate() < nasc.getDate())) i--;
+  return i;
+}
+
+// ---------- mapeadores ----------
+
+function mapMatch(m, brazilId) {
+  const st = mapStatus(m.status);
+  return {
+    id: m.id,
+    data: m.utcDate,
+    status: st,
+    statusDescricao: STATUS_DESC[st] ?? m.status,
+    estadio: m.venue ?? null,
+    cidade: null,
+    competicao: m.competition?.name ?? 'Copa do Mundo',
+    fase: faseLabel(m),
+    mandante: { id: m.homeTeam.id, nome: ptNome(m.homeTeam), escudo: m.homeTeam.crest ?? null, brasil: m.homeTeam.id === brazilId, gols: m.score?.fullTime?.home ?? null },
+    visitante: { id: m.awayTeam.id, nome: ptNome(m.awayTeam), escudo: m.awayTeam.crest ?? null, brasil: m.awayTeam.id === brazilId, gols: m.score?.fullTime?.away ?? null },
+  };
+}
+
+const mapScorer = (s, brazilId) => ({
+  jogador: s.player?.name ?? '—',
+  foto: s.team?.crest ?? '',
+  gols: s.goals ?? 0,
+  assistencias: s.assists ?? 0,
+  jogos: s.playedMatches ?? 0,
+  brasil: s.team?.id === brazilId,
+});
+
+// mapeia um jogo do mata-mata (trata seleções ainda indefinidas como "A definir")
+function mapMatchBracket(m, brazilId) {
+  const time = (t) => ({
+    id: t?.id ?? null,
+    nome: t?.name ? ptNome(t) : 'A definir',
+    brasil: !!t?.id && t.id === brazilId,
+    escudo: t?.crest ?? null,
+  });
+  const st = mapStatus(m.status);
+  return {
+    id: m.id,
+    data: m.utcDate,
+    status: st,
+    statusDescricao: STATUS_DESC[st] ?? m.status,
+    mandante: { ...time(m.homeTeam), gols: m.score?.fullTime?.home ?? null },
+    visitante: { ...time(m.awayTeam), gols: m.score?.fullTime?.away ?? null },
+  };
+}
+
+const mapStandingRow = (r, brazilId) => ({
+  posicao: r.position,
+  time: ptNome(r.team),
+  timeId: r.team.id,
+  escudo: r.team.crest ?? null,
+  brasil: r.team.id === brazilId,
+  pontos: r.points,
+  jogos: r.playedGames,
+  vitorias: r.won,
+  empates: r.draw,
+  derrotas: r.lost,
+  golsPro: r.goalsFor,
+  golsContra: r.goalsAgainst,
+  saldo: r.goalDifference,
+});
+
+// elenco vindo da football-data.org (sem foto/número)
+const mapPlayer = (p) => ({
+  id: p.id,
+  nome: p.name,
+  idade: idade(p.dateOfBirth),
+  numero: p.shirtNumber ?? null,
+  posicao: posPT(p.position),
+  foto: '',
+});
+
+// Correção manual de posição para casos que a API-Football classifica errado
+// (pontas rotuladas como meio-campo). Usado quando a football-data não está disponível.
+const CORRECAO_POSICAO = {
+  'vinicius junior': 'Atacante',
+  'raphinha': 'Atacante',
+};
+
+// ordena o elenco por setor: goleiros -> defensores -> meio-campos -> atacantes
+// (mantém a ordem original dentro de cada setor). Resolve casos como um defensor
+// aparecendo depois de um meio-campo.
+const ORDEM_SETOR = { Goleiro: 0, Defensor: 1, 'Meio-campo': 2, Atacante: 3 };
+const ordenarElenco = (jogadores) =>
+  [...jogadores].sort((a, b) => (ORDEM_SETOR[a.posicao] ?? 9) - (ORDEM_SETOR[b.posicao] ?? 9));
+
+// elenco vindo da API-Football (com foto + número da camisa)
+const mapPlayerAF = (p) => ({
+  id: p.id,
+  nome: p.name,
+  idade: p.age ?? null,
+  numero: p.number ?? null,
+  posicao: posPT(p.position),
+  foto: p.photo || '',
+});
+
+// ---------- acesso à API ----------
+
+// Resolve o ID do Brasil dinamicamente a partir das seleções da Copa (cacheado 1 dia).
+async function resolveBrazilId() {
+  const data = await apiGet(`/competitions/${worldCupCode}/teams`, {}, CACHE_TTL.meta, 'wc-teams');
+  const t = (data.teams || []).find((x) => x.tla === 'BRA' || /brazil|brasil/i.test(x.name));
+  return t?.id ?? config.brazilTeamId;
+}
+
+// Busca todos os jogos do Brasil na Copa (uma chamada serve várias seções).
+async function fetchBrazilMatches(ttl, key) {
+  const brazilId = await resolveBrazilId();
+  const data = await apiGet(`/teams/${brazilId}/matches`, { competitions: worldCupId }, ttl, key);
+  return { brazilId, matches: data.matches || [], cached: data._cached };
+}
+
+const golsDoBrasilNoJogo = (m, brazilId) =>
+  (m.homeTeam.id === brazilId ? m.score?.fullTime?.home : m.score?.fullTime?.away) ?? 0;
+
+// Mapa { nomeNormalizado -> posiçãoPT } a partir da football-data (posições mais precisas).
+async function footballDataPositions() {
+  const brazilId = await resolveBrazilId();
+  const data = await apiGet(`/teams/${brazilId}`, {}, CACHE_TTL.squad, 'elenco');
+  const mapa = {};
+  (data.squad || []).forEach((p) => { mapa[normalizar(p.name)] = posPT(p.position); });
+  return mapa;
+}
+
+// ---------- funções de domínio ----------
+
+export async function proximosJogos() {
+  return withDemoFallback(async () => {
+    const { brazilId, matches, cached } = await fetchBrazilMatches(CACHE_TTL.fixtures, 'brazil-matches');
+    const jogos = matches
+      .filter((m) => !['FINISHED', 'CANCELLED', 'AWARDED'].includes(m.status))
+      .sort((a, b) => new Date(a.utcDate) - new Date(b.utcDate))
+      .slice(0, 5)
+      .map((m) => mapMatch(m, brazilId));
+    return { fonte: cached ? 'cache' : 'api', jogos };
+  }, () => mock.mockProximosJogos);
+}
+
+export async function proximoJogo() {
+  return withDemoFallback(async () => {
+    const { brazilId, matches } = await fetchBrazilMatches(CACHE_TTL.fixtures, 'brazil-matches');
+    const prox = matches
+      .filter((m) => !['FINISHED', 'CANCELLED', 'AWARDED'].includes(m.status))
+      .sort((a, b) => new Date(a.utcDate) - new Date(b.utcDate))[0];
+    if (!prox) return { fonte: 'api', jogo: null };
+
+    const jogo = mapMatch(prox, brazilId);
+    const advTime = prox.homeTeam.id === brazilId ? prox.awayTeam : prox.homeTeam;
+    const adversario = { id: advTime.id, nome: ptNome(advTime), escudo: advTime.crest ?? null };
+
+    // estádio + árbitro (detalhe da partida)
+    let estadio = null, arbitro = null;
+    try {
+      const det = await apiGet(`/matches/${prox.id}`, {}, CACHE_TTL.fixtures, `match-${prox.id}`);
+      if (det.venue) estadio = { nome: det.venue };
+      arbitro = det.referees?.[0]?.name ?? null;
+    } catch { /* opcional */ }
+
+    // imagem do estádio (API-Football, opcional)
+    if (estadio && config.apiFootball.key) {
+      try {
+        const v = await apiSportsGet('/venues', { search: estadio.nome }, CACHE_TTL.squad, `venue-${normalizar(estadio.nome)}`);
+        const found = v.response?.[0];
+        if (found) { estadio.cidade = found.city; estadio.capacidade = found.capacity; estadio.imagem = found.image; }
+      } catch { /* opcional */ }
+    }
+
+    return { fonte: 'api', jogo, adversario, estadio, arbitro };
+  }, () => mock.mockProximoJogo);
+}
+
+export async function resultados() {
+  return withDemoFallback(async () => {
+    const { brazilId, matches, cached } = await fetchBrazilMatches(CACHE_TTL.results, 'brazil-matches');
+    const jogos = matches
+      .filter((m) => m.status === 'FINISHED')
+      .sort((a, b) => new Date(b.utcDate) - new Date(a.utcDate))
+      .slice(0, 5)
+      .map((m) => mapMatch(m, brazilId));
+    return { fonte: cached ? 'cache' : 'api', jogos };
+  }, () => mock.mockResultados);
+}
+
+export async function aoVivo() {
+  return withDemoFallback(async () => {
+    const { brazilId, matches, cached } = await fetchBrazilMatches(CACHE_TTL.live, 'brazil-matches-live');
+    const jogos = matches
+      .filter((m) => ['IN_PLAY', 'PAUSED'].includes(m.status))
+      .map((m) => mapMatch(m, brazilId));
+    return { fonte: cached ? 'cache' : 'api', aoVivo: jogos.length > 0, jogos };
+  }, () => mock.mockAoVivo);
+}
+
+export async function artilheiros() {
+  return withDemoFallback(async () => {
+    const brazilId = await resolveBrazilId();
+    // limite alto para capturar todos os brasileiros, depois filtra só o Brasil.
+    const data = await apiGet(`/competitions/${worldCupCode}/scorers`, { limit: 50 }, CACHE_TTL.scorers, 'scorers-50');
+    const artilheiros = (data.scorers || [])
+      .filter((s) => s.team?.id === brazilId)
+      .map((s) => mapScorer(s, brazilId));
+    return { fonte: data._cached ? 'cache' : 'api', artilheiros };
+  }, () => mock.mockArtilheiros);
+}
+
+export async function golsDaSelecao() {
+  return withDemoFallback(async () => {
+    const { brazilId, matches } = await fetchBrazilMatches(CACHE_TTL.results, 'brazil-matches');
+    const totalGols = matches
+      .filter((m) => m.status === 'FINISHED')
+      .reduce((s, m) => s + golsDoBrasilNoJogo(m, brazilId), 0);
+    const scorers = await apiGet(`/competitions/${worldCupCode}/scorers`, { limit: 20 }, CACHE_TTL.scorers, 'scorers-20');
+    const marcadores = (scorers.scorers || [])
+      .filter((s) => s.team?.id === brazilId)
+      .map((s) => mapScorer(s, brazilId));
+    return { fonte: scorers._cached ? 'cache' : 'api', totalGols, marcadores };
+  }, () => mock.mockGols);
+}
+
+export async function classificacao() {
+  return withDemoFallback(async () => {
+    const brazilId = await resolveBrazilId();
+    const data = await apiGet(`/competitions/${worldCupCode}/standings`, {}, CACHE_TTL.standings, 'standings');
+    const totais = (data.standings || []).filter((s) => s.type === 'TOTAL');
+    const grupos = totais.map((g) => g.table.map((r) => mapStandingRow(r, brazilId)));
+    // coloca o grupo do Brasil em primeiro
+    grupos.sort((a, b) => (b.some((r) => r.brasil) ? 1 : 0) - (a.some((r) => r.brasil) ? 1 : 0));
+    return { fonte: data._cached ? 'cache' : 'api', grupos };
+  }, () => mock.mockClassificacao);
+}
+
+export async function chaveamento() {
+  return withDemoFallback(async () => {
+    const brazilId = await resolveBrazilId();
+    const data = await apiGet(`/competitions/${worldCupCode}/matches`, {}, CACHE_TTL.standings, 'chaveamento');
+    const matches = data.matches || [];
+    const ORDEM = ['LAST_32', 'LAST_16', 'QUARTER_FINALS', 'SEMI_FINALS', 'THIRD_PLACE', 'FINAL'];
+    const fases = ORDEM
+      .map((stage) => ({
+        fase: STAGE_PT[stage] ?? stage,
+        jogos: matches
+          .filter((m) => m.stage === stage)
+          .sort((a, b) => a.id - b.id) // ordem do chaveamento (mais próxima da sequência da chave)
+          .map((m) => mapMatchBracket(m, brazilId)),
+      }))
+      .filter((f) => f.jogos.length > 0);
+    return { fonte: data._cached ? 'cache' : 'api', fases };
+  }, () => mock.mockChaveamento);
+}
+
+export async function elenco() {
+  return withDemoFallback(async () => {
+    // Preferência: API-Football (tem foto + número da camisa).
+    if (config.apiFootball.key) {
+      const data = await apiSportsGet('/players/squads', { team: config.apiFootball.brazilTeamId }, CACHE_TTL.squad, 'elenco-af');
+      const players = data.response?.[0]?.players ?? [];
+      if (players.length) {
+        // Corrige a posição usando a football-data (mais precisa); se não casar o nome, mantém a da API-Football.
+        const posMap = await footballDataPositions().catch(() => ({}));
+        const jogadores = players.map((p) => {
+          const base = mapPlayerAF(p);
+          const chave = normalizar(p.name);
+          // prioridade: football-data (geral) -> correção manual (casos conhecidos) -> API-Football
+          const posicao = posMap[chave] || CORRECAO_POSICAO[chave] || base.posicao;
+          return { ...base, posicao };
+        });
+        return { fonte: data._cached ? 'cache' : 'api', jogadores: ordenarElenco(jogadores) };
+      }
+    }
+    // Fallback: football-data.org (sem foto).
+    const brazilId = await resolveBrazilId();
+    const data = await apiGet(`/teams/${brazilId}`, {}, CACHE_TTL.squad, 'elenco');
+    return { fonte: data._cached ? 'cache' : 'api', jogadores: ordenarElenco((data.squad || []).map(mapPlayer)) };
+  }, () => mock.mockElenco);
+}

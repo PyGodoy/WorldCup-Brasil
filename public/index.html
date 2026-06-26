@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Seleção Brasileira · Copa do Mundo 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <!-- textura de grão sobre tudo -->
+  <div class="grain" aria-hidden="true"></div>
+
+  <!-- losango decorativo (motivo da bandeira) -->
+  <div class="rhombus-bg" aria-hidden="true">
+    <span class="rh rh1"></span>
+    <span class="rh rh2"></span>
+  </div>
+
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-flag" viewBox="0 0 28 20" role="img" aria-label="Bandeira do Brasil">
+        <rect width="28" height="20" rx="2.5" fill="#009b3a"/>
+        <polygon points="14,2.5 25.5,10 14,17.5 2.5,10" fill="#ffdf00"/>
+        <circle cx="14" cy="10" r="3.9" fill="#002776"/>
+      </svg>
+      <span class="brand-text">RUMO AO <em>HEXA</em></span>
+    </div>
+    <nav class="nav">
+      <a href="#proximos">Jogos</a>
+      <a href="#gols">Gols</a>
+      <a href="#artilheiros">Artilheiros</a>
+      <a href="#grupo">Grupo</a>
+      <a href="#resultados">Resultados</a>
+      <a href="#chaveamento">Mata-mata</a>
+      <a href="#elenco">Elenco</a>
+    </nav>
+    <div class="status-pill" id="statusPill">
+      <span class="dot"></span><span id="statusText">conectando…</span>
+    </div>
+  </header>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-kicker">FIFA WORLD CUP · USA · CANADÁ · MÉXICO</div>
+    <h1 class="hero-title">
+      <span class="line">SELEÇÃO</span>
+      <span class="line outline">BRASILEIRA</span>
+    </h1>
+    <p class="hero-sub">Tudo sobre a busca do <strong>hexa</strong>: próximos jogos, gols, artilheiros e classificação — em um só lugar.</p>
+    <div class="hero-marquee" aria-hidden="true">
+      <div class="marquee-track">
+        <span>RUMO AO HEXA ★ </span><span>RUMO AO HEXA ★ </span><span>RUMO AO HEXA ★ </span><span>RUMO AO HEXA ★ </span><span>RUMO AO HEXA ★ </span><span>RUMO AO HEXA ★ </span>
+      </div>
+    </div>
+  </section>
+
+  <main class="container">
+
+    <!-- AO VIVO (aparece só quando há jogo) -->
+    <section id="aovivo" class="live-banner hidden">
+      <div class="live-tag"><span class="live-dot"></span>AO VIVO</div>
+      <div id="liveContent" class="live-content"></div>
+    </section>
+
+    <!-- PRÓXIMOS JOGOS -->
+    <section id="proximos" class="block">
+      <div class="block-head">
+        <h2 class="block-title">Próximos<br>jogos</h2>
+        <span class="block-num">01</span>
+      </div>
+      <div id="proximoDestaque"></div>
+      <div id="proximosJogos" class="matches-grid"></div>
+    </section>
+
+    <!-- GOLS + ARTILHEIROS -->
+    <div class="split">
+      <section id="gols" class="block goals-block">
+        <div class="block-head">
+          <h2 class="block-title">Gols da<br>seleção</h2>
+          <span class="block-num">02</span>
+        </div>
+        <div class="goals-counter">
+          <span class="goals-number" id="golsNumero">—</span>
+          <span class="goals-label">gols no torneio</span>
+        </div>
+      </section>
+
+      <section id="artilheiros" class="block">
+        <div class="block-head">
+          <h2 class="block-title">Artilheiros</h2>
+          <span class="block-num">03</span>
+        </div>
+        <ol id="artilheirosLista" class="scorers-list">
+          <li class="skeleton row-skel"></li>
+          <li class="skeleton row-skel"></li>
+          <li class="skeleton row-skel"></li>
+        </ol>
+      </section>
+    </div>
+
+    <!-- CLASSIFICAÇÃO -->
+    <section id="grupo" class="block">
+      <div class="block-head">
+        <h2 class="block-title">Classificação<br>do grupo</h2>
+        <span class="block-num">04</span>
+      </div>
+      <div id="classificacao" class="table-wrap">
+        <div class="skeleton table-skel"></div>
+      </div>
+    </section>
+
+    <!-- RESULTADOS -->
+    <section id="resultados" class="block">
+      <div class="block-head">
+        <h2 class="block-title">Últimos<br>resultados</h2>
+        <span class="block-num">05</span>
+      </div>
+      <div id="resultadosGrid" class="matches-grid">
+        <div class="skeleton card-skel"></div>
+        <div class="skeleton card-skel"></div>
+      </div>
+    </section>
+
+    <!-- CHAVEAMENTO / MATA-MATA -->
+    <section id="chaveamento" class="block">
+      <div class="block-head">
+        <h2 class="block-title">Mata-mata<br>rumo à final</h2>
+        <span class="block-num">06</span>
+      </div>
+      <p class="drag-hint"><span class="hand">✋</span> Arraste para explorar a chave</p>
+      <div id="bracket" class="bracket">
+        <div class="skeleton table-skel"></div>
+      </div>
+    </section>
+
+    <!-- ELENCO -->
+    <section id="elenco" class="block">
+      <div class="block-head">
+        <h2 class="block-title">Elenco<br>convocado</h2>
+        <span class="block-num">07</span>
+      </div>
+      <div id="elencoGrid" class="squad-grid">
+        <div class="skeleton player-skel"></div>
+        <div class="skeleton player-skel"></div>
+        <div class="skeleton player-skel"></div>
+        <div class="skeleton player-skel"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    <div class="footer-big">HEXA<span>2026</span></div>
+    <p>Dados via <strong>API-Football</strong> · Desenvolvido por Mikaell Godoy
+      <span id="footerFonte" class="footer-fonte"></span>
+    </p>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>
