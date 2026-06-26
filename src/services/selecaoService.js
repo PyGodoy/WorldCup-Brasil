@@ -23,15 +23,32 @@ async function withDemoFallback(realCall, mockFactory) {
 
 // ---------- helpers ----------
 
-// Nomes de seleções em português (fallback: nome original da API).
+// Nomes de seleções em português (chaves = nome exato da football-data; fallback: nome original).
 const NOMES_PT = {
-  Brazil: 'Brasil', Argentina: 'Argentina', France: 'França', Croatia: 'Croácia',
-  Serbia: 'Sérvia', Cameroon: 'Camarões', Germany: 'Alemanha', Spain: 'Espanha',
-  Portugal: 'Portugal', England: 'Inglaterra', 'South Korea': 'Coreia do Sul',
-  Japan: 'Japão', Mexico: 'México', 'United States': 'Estados Unidos', Canada: 'Canadá',
-  Netherlands: 'Holanda', Belgium: 'Bélgica', Italy: 'Itália', Uruguay: 'Uruguai',
-  Colombia: 'Colômbia', Switzerland: 'Suíça', Morocco: 'Marrocos', Senegal: 'Senegal',
-  Ecuador: 'Equador', Paraguay: 'Paraguai', Chile: 'Chile', Peru: 'Peru',
+  // Américas
+  Brazil: 'Brasil', Argentina: 'Argentina', Uruguay: 'Uruguai', Colombia: 'Colômbia',
+  Ecuador: 'Equador', Paraguay: 'Paraguai', Chile: 'Chile', Peru: 'Peru', Bolivia: 'Bolívia',
+  Venezuela: 'Venezuela', Mexico: 'México', 'United States': 'Estados Unidos', Canada: 'Canadá',
+  'Costa Rica': 'Costa Rica', Panama: 'Panamá', Honduras: 'Honduras', Jamaica: 'Jamaica',
+  Haiti: 'Haiti', 'Curaçao': 'Curaçao',
+  // Europa
+  France: 'França', Germany: 'Alemanha', Spain: 'Espanha', Portugal: 'Portugal',
+  England: 'Inglaterra', Scotland: 'Escócia', Wales: 'País de Gales', Netherlands: 'Holanda',
+  Belgium: 'Bélgica', Italy: 'Itália', Croatia: 'Croácia', Serbia: 'Sérvia',
+  Switzerland: 'Suíça', Sweden: 'Suécia', Norway: 'Noruega', Denmark: 'Dinamarca',
+  Poland: 'Polônia', Austria: 'Áustria', Czechia: 'Tchéquia', 'Czech Republic': 'Tchéquia',
+  'Bosnia-Herzegovina': 'Bósnia e Herzegovina', Ukraine: 'Ucrânia', Turkey: 'Turquia',
+  Greece: 'Grécia', Hungary: 'Hungria', Romania: 'Romênia', Slovakia: 'Eslováquia',
+  Slovenia: 'Eslovênia', 'Republic of Ireland': 'Irlanda', Iceland: 'Islândia', Finland: 'Finlândia',
+  // África
+  Morocco: 'Marrocos', Senegal: 'Senegal', Cameroon: 'Camarões', 'Ivory Coast': 'Costa do Marfim',
+  'South Africa': 'África do Sul', Tunisia: 'Tunísia', Egypt: 'Egito', Algeria: 'Argélia',
+  Ghana: 'Gana', Nigeria: 'Nigéria', 'Cape Verde Islands': 'Cabo Verde', 'Congo DR': 'RD Congo',
+  Mali: 'Mali', 'Burkina Faso': 'Burkina Faso', Angola: 'Angola', Mozambique: 'Moçambique',
+  // Ásia / Oceania
+  Japan: 'Japão', 'South Korea': 'Coreia do Sul', Iran: 'Irã', 'Saudi Arabia': 'Arábia Saudita',
+  Qatar: 'Catar', Iraq: 'Iraque', 'United Arab Emirates': 'Emirados Árabes', Jordan: 'Jordânia',
+  Uzbekistan: 'Uzbequistão', Australia: 'Austrália', 'New Zealand': 'Nova Zelândia',
 };
 const ptNome = (time) => NOMES_PT[time?.name] ?? time?.name ?? '—';
 
