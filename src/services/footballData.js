@@ -5,6 +5,10 @@ import { config } from '../config.js';
 // 10 mil visitantes leem desta cópia; a API externa só é chamada quando o cache expira.
 const cache = new NodeCache({ checkperiod: 60 });
 
+// "Último dado bom" por chave (sem expirar). Serve de rede de segurança: se a atualização
+// falhar (rate-limit/rede), devolvemos o último dado real em vez de cair pro demo.
+const lastGood = new Map();
+
 // Contador de chamadas REAIS à API (útil para acompanhar o consumo do plano free).
 let realApiCalls = 0;
 export const getApiCallCount = () => realApiCalls;
@@ -30,31 +34,43 @@ export async function apiGet(path, params, ttl, cacheKey) {
   const url = new URL(config.footballData.baseUrl + path);
   Object.entries(params || {}).forEach(([k, v]) => url.searchParams.set(k, v));
 
-  realApiCalls += 1;
+  try {
+    realApiCalls += 1;
 
-  const res = await fetch(url, {
-    headers: { 'X-Auth-Token': config.footballData.key },
-  });
+    const res = await fetch(url, {
+      headers: { 'X-Auth-Token': config.footballData.key },
+    });
 
-  // 403 = recurso restrito ao plano -> cai no fallback demo (igual ao DEMO_MODE).
-  if (res.status === 403) {
-    const e = new Error('PLAN_LIMIT: recurso restrito ao seu plano');
-    e.code = 'PLAN_LIMIT';
-    throw e;
-  }
-  // 429 = estourou o limite de requisições por minuto.
-  if (res.status === 429) {
-    const e = new Error('RATE_LIMIT: limite de requisições por minuto atingido');
-    e.code = 'RATE_LIMIT';
-    throw e;
-  }
-  if (!res.ok) {
-    throw new Error(`football-data respondeu ${res.status}: ${res.statusText}`);
-  }
+    // 403 = recurso restrito ao plano -> cai no fallback demo (igual ao DEMO_MODE).
+    if (res.status === 403) {
+      const e = new Error('PLAN_LIMIT: recurso restrito ao seu plano');
+      e.code = 'PLAN_LIMIT';
+      throw e;
+    }
+    // 429 = estourou o limite de requisições por minuto.
+    if (res.status === 429) {
+      const e = new Error('RATE_LIMIT: limite de requisições por minuto atingido');
+      e.code = 'RATE_LIMIT';
+      throw e;
+    }
+    if (!res.ok) {
+      throw new Error(`football-data respondeu ${res.status}: ${res.statusText}`);
+    }
 
-  const data = await res.json();
-  cache.set(cacheKey, data, ttl);
-  return { ...data, _cached: false };
+    const data = await res.json();
+    cache.set(cacheKey, data, ttl);
+    lastGood.set(cacheKey, data); // guarda o último dado real
+    return { ...data, _cached: false };
+  } catch (err) {
+    // Falhou a atualização (rate-limit/rede). Se temos um último dado real, servimos ele
+    // (mesmo "velho") em vez de cair pro demo. PLAN_LIMIT continua indo pro demo de propósito.
+    if (err.code !== 'PLAN_LIMIT' && lastGood.has(cacheKey)) {
+      const data = lastGood.get(cacheKey);
+      cache.set(cacheKey, data, 60); // re-cacheia por 60s pra tentar de novo logo
+      return { ...data, _cached: true, _stale: true };
+    }
+    throw err;
+  }
 }
 
 export { cache };
