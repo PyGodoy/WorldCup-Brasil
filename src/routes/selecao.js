@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import * as service from '../services/selecaoService.js';
 import { getApiCallCount } from '../services/footballData.js';
+import { usingRedis } from '../services/cache.js';
 import { config } from '../config.js';
 
 const router = Router();
@@ -32,6 +33,7 @@ router.get('/status', (req, res) => {
     ok: true,
     modo: config.demoMode ? 'DEMO (sem chave da API)' : 'PRODUÇÃO',
     provedor: 'football-data.org',
+    cache: usingRedis ? 'redis (compartilhado)' : 'memoria (local)',
     chamadasReais: getApiCallCount(),
   });
 });

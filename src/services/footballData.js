@@ -1,28 +1,22 @@
-import NodeCache from 'node-cache';
+import { cacheGet, cacheSet } from './cache.js';
 import { config } from '../config.js';
 
-// Cache em memória compartilhado por TODOS os visitantes.
-// 10 mil visitantes leem desta cópia; a API externa só é chamada quando o cache expira.
-const cache = new NodeCache({ checkperiod: 60 });
-
-// "Último dado bom" por chave (sem expirar). Serve de rede de segurança: se a atualização
-// falhar (rate-limit/rede), devolvemos o último dado real em vez de cair pro demo.
-const lastGood = new Map();
-
-// Contador de chamadas REAIS à API (útil para acompanhar o consumo do plano free).
+// Contador de chamadas REAIS à API (por instância; útil para acompanhar o consumo).
 let realApiCalls = 0;
 export const getApiCallCount = () => realApiCalls;
 
 /**
- * GET na football-data.org, sempre passando pelo cache.
+ * GET na football-data.org, sempre passando pelo cache compartilhado.
+ * Se a atualização falhar (rate-limit/rede), serve o "último dado bom" salvo em vez de
+ * cair pro demo — assim o site não fica offline. PLAN_LIMIT (403) continua propagando.
  * @param {string} path     ex: "/competitions/WC/standings"
  * @param {object} params   query params
  * @param {number} ttl      tempo de cache em segundos
  * @param {string} cacheKey chave única do cache
  */
 export async function apiGet(path, params, ttl, cacheKey) {
-  const cached = cache.get(cacheKey);
-  if (cached !== undefined) {
+  const cached = await cacheGet(cacheKey);
+  if (cached != null) {
     return { ...cached, _cached: true };
   }
 
@@ -41,7 +35,7 @@ export async function apiGet(path, params, ttl, cacheKey) {
       headers: { 'X-Auth-Token': config.footballData.key },
     });
 
-    // 403 = recurso restrito ao plano -> cai no fallback demo (igual ao DEMO_MODE).
+    // 403 = recurso restrito ao plano -> propaga (vira erro/mensagem no front).
     if (res.status === 403) {
       const e = new Error('PLAN_LIMIT: recurso restrito ao seu plano');
       e.code = 'PLAN_LIMIT';
@@ -58,19 +52,18 @@ export async function apiGet(path, params, ttl, cacheKey) {
     }
 
     const data = await res.json();
-    cache.set(cacheKey, data, ttl);
-    lastGood.set(cacheKey, data); // guarda o último dado real
+    await cacheSet(cacheKey, data, ttl);
+    await cacheSet(`good:${cacheKey}`, data, 7 * 24 * 3600); // último dado bom (7 dias)
     return { ...data, _cached: false };
   } catch (err) {
-    // Falhou a atualização (rate-limit/rede). Se temos um último dado real, servimos ele
-    // (mesmo "velho") em vez de cair pro demo. PLAN_LIMIT continua indo pro demo de propósito.
-    if (err.code !== 'PLAN_LIMIT' && lastGood.has(cacheKey)) {
-      const data = lastGood.get(cacheKey);
-      cache.set(cacheKey, data, 60); // re-cacheia por 60s pra tentar de novo logo
-      return { ...data, _cached: true, _stale: true };
+    // Atualização falhou (rate-limit/rede). Se temos um último dado real, servimos ele.
+    if (err.code !== 'PLAN_LIMIT') {
+      const good = await cacheGet(`good:${cacheKey}`);
+      if (good != null) {
+        await cacheSet(cacheKey, good, 60); // re-tenta atualizar em 60s
+        return { ...good, _cached: true, _stale: true };
+      }
     }
     throw err;
   }
 }
-
-export { cache };

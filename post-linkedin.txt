@@ -1,0 +1,26 @@
+🇧🇷 Em clima de Copa do Mundo! ⚽
+
+A Copa de 2026 chegou e eu não resisti: uni minha paixão por futebol com programação e criei um site com tudo sobre a Seleção Brasileira na busca pelo hexa! 🏆
+
+🔗 https://brasilnacopa26.vercel.app/
+
+No "Rumo ao Hexa" dá pra acompanhar, com dados reais e em tempo real:
+⚽ Próximo jogo com contagem regressiva
+🔴 Placar ao vivo
+🥅 Gols da seleção e artilheiros
+📊 Classificação do grupo
+🏆 Chaveamento do mata-mata (interativo, das oitavas à final)
+👥 Elenco convocado com fotos
+
+⚙️ Por baixo dos panos (a stack):
+• Back-end em Node.js + Express
+• Front-end em HTML, CSS e JavaScript puro (sem frameworks)
+• Dados reais consumidos das APIs football-data.org e API-Football
+• Uma camada de cache pra aguentar tráfego sem estourar o limite das APIs gratuitas
+• Deploy na Vercel
+
+Mais que um projeto de futebol, foi um baita aprendizado sobre consumo de APIs, cache, tratamento de erros e como contornar as limitações dos planos gratuitos. 😅
+
+Bora torcer juntos? Dá uma olhada e me conta o que achou! 👇
+
+#desenvolvimento #programação #javascript #nodejs #webdev #copadomundo2026 #futebol #frontend #backend #devbr

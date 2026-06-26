@@ -1,16 +1,11 @@
-import NodeCache from 'node-cache';
+import { cacheGet, cacheSet } from './cache.js';
 import { config } from '../config.js';
 
 // Cliente mínimo da API-Football (api-sports), usado APENAS para o elenco,
-// porque ela fornece foto + número da camisa dos jogadores.
-const cache = new NodeCache({ checkperiod: 60 });
-
-/**
- * GET na API-Football, passando pelo cache. Só é chamado quando há chave configurada.
- */
+// porque ela fornece foto + número da camisa dos jogadores. Usa o cache compartilhado.
 export async function apiSportsGet(path, params, ttl, cacheKey) {
-  const cached = cache.get(cacheKey);
-  if (cached !== undefined) return { ...cached, _cached: true };
+  const cached = await cacheGet(cacheKey);
+  if (cached != null) return { ...cached, _cached: true };
 
   const url = new URL(`https://${config.apiFootball.host}${path}`);
   Object.entries(params || {}).forEach(([k, v]) => url.searchParams.set(k, v));
@@ -25,6 +20,6 @@ export async function apiSportsGet(path, params, ttl, cacheKey) {
   }
 
   const payload = { response: data.response };
-  cache.set(cacheKey, payload, ttl);
+  await cacheSet(cacheKey, payload, ttl);
   return { ...payload, _cached: false };
 }
