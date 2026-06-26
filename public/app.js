@@ -65,10 +65,9 @@ async function loadProximoJogo() {
   try {
     const d = await get('proximo-jogo');
     setFonte(d.fonte);
-    if (!d.jogo) { el.innerHTML = ''; return; }
+    if (!d.jogo) { el.innerHTML = '<div class="empty-state">Nenhum jogo agendado no momento.</div>'; return; }
     const j = d.jogo, est = d.estadio;
     const bg = est && est.imagem ? `style="--bg:url('${est.imagem}')"` : '';
-    const localEstadio = est && est.nome ? est.nome + (est.cidade ? ` · ${est.cidade}` : '') : 'Estádio a confirmar';
     el.innerHTML = `
       <div class="next-card" ${bg}>
         <div class="next-head">
@@ -82,12 +81,11 @@ async function loadProximoJogo() {
         </div>
         <div class="countdown" id="countdown" data-target="${j.data}"></div>
         <div class="next-meta">
-          <span>🏟️ ${localEstadio}</span>
           <span>🧑‍⚖️ ${d.arbitro || 'Árbitro a confirmar'}</span>
         </div>
       </div>`;
     startCountdown();
-  } catch (e) { el.innerHTML = ''; }
+  } catch (e) { el.innerHTML = '<div class="empty-state">Não foi possível carregar o próximo jogo.</div>'; }
 }
 
 function cdBox(n, l) { return `<div class="cd-box"><span class="cd-num">${String(n).padStart(2, '0')}</span><span class="cd-lbl">${l}</span></div>`; }

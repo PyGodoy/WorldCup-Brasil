@@ -218,7 +218,9 @@ tbody tr.is-br td.left { color: var(--yellow); }
   overflow-y: hidden; /* impede o chaveamento de "prender" o scroll vertical da página */
   padding-bottom: 20px; cursor: grab;
   scrollbar-width: none; -ms-overflow-style: none; -webkit-overflow-scrolling: touch;
-  touch-action: pan-x; /* no mobile: arrasto horizontal na chave, vertical rola a página */
+  /* permite arrasto horizontal (move a chave) E vertical (rola a página) no mobile.
+     'pan-x' sozinho travava o scroll vertical de quem começava o gesto sobre a chave. */
+  touch-action: pan-x pan-y;
 }
 .bracket::-webkit-scrollbar { display: none; } /* esconde a barra (Chrome/Safari/Edge) */
 .bracket.dragging { cursor: grabbing; user-select: none; }

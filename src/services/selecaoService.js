@@ -1,21 +1,21 @@
 import { apiGet } from './footballData.js';
 import { apiSportsGet } from './apiSports.js';
 import { config, CACHE_TTL } from '../config.js';
-import * as mock from './mockData.js';
 
 const { worldCupCode, worldCupId } = config;
 
-// Tenta a API real. Cai no mock quando: sem chave (DEMO_MODE), recurso restrito ao
-// plano (PLAN_LIMIT) ou limite de req/min (RATE_LIMIT). Assim o site nunca quebra.
-async function withDemoFallback(realCall, mockFactory) {
+// Executa a chamada real à API. Se a API estiver indisponível (sem chave, limite de
+// requisições atingido ou recurso restrito ao plano), NÃO preenchemos com dados de
+// exemplo — lançamos um erro para a rota responder com falha e o frontend mostrar uma
+// mensagem ao usuário, em vez de exibir dados falsos.
+async function withDemoFallback(realCall) {
   try {
     return await realCall();
   } catch (err) {
     if (['DEMO_MODE', 'PLAN_LIMIT', 'RATE_LIMIT'].includes(err.code) || err.message === 'DEMO_MODE') {
-      if (err.message !== 'DEMO_MODE' && err.code !== 'DEMO_MODE') {
-        console.warn(`[fallback] usando dados demo: ${err.message}`);
-      }
-      return { fonte: 'demo', ...mockFactory() };
+      const e = new Error('Dados temporariamente indisponíveis');
+      e.code = 'INDISPONIVEL';
+      throw e;
     }
     throw err;
   }
@@ -223,7 +223,7 @@ export async function proximosJogos() {
       .slice(0, 5)
       .map((m) => mapMatch(m, brazilId));
     return { fonte: cached ? 'cache' : 'api', jogos };
-  }, () => mock.mockProximosJogos);
+  });
 }
 
 export async function proximoJogo() {
@@ -256,7 +256,7 @@ export async function proximoJogo() {
     }
 
     return { fonte: 'api', jogo, adversario, estadio, arbitro };
-  }, () => mock.mockProximoJogo);
+  });
 }
 
 export async function resultados() {
@@ -268,7 +268,7 @@ export async function resultados() {
       .slice(0, 5)
       .map((m) => mapMatch(m, brazilId));
     return { fonte: cached ? 'cache' : 'api', jogos };
-  }, () => mock.mockResultados);
+  });
 }
 
 export async function aoVivo() {
@@ -278,7 +278,7 @@ export async function aoVivo() {
       .filter((m) => ['IN_PLAY', 'PAUSED'].includes(m.status))
       .map((m) => mapMatch(m, brazilId));
     return { fonte: cached ? 'cache' : 'api', aoVivo: jogos.length > 0, jogos };
-  }, () => mock.mockAoVivo);
+  });
 }
 
 export async function artilheiros() {
@@ -290,7 +290,7 @@ export async function artilheiros() {
       .filter((s) => s.team?.id === brazilId)
       .map((s) => mapScorer(s, brazilId));
     return { fonte: data._cached ? 'cache' : 'api', artilheiros };
-  }, () => mock.mockArtilheiros);
+  });
 }
 
 export async function golsDaSelecao() {
@@ -304,7 +304,7 @@ export async function golsDaSelecao() {
       .filter((s) => s.team?.id === brazilId)
       .map((s) => mapScorer(s, brazilId));
     return { fonte: scorers._cached ? 'cache' : 'api', totalGols, marcadores };
-  }, () => mock.mockGols);
+  });
 }
 
 export async function classificacao() {
@@ -316,7 +316,7 @@ export async function classificacao() {
     // coloca o grupo do Brasil em primeiro
     grupos.sort((a, b) => (b.some((r) => r.brasil) ? 1 : 0) - (a.some((r) => r.brasil) ? 1 : 0));
     return { fonte: data._cached ? 'cache' : 'api', grupos };
-  }, () => mock.mockClassificacao);
+  });
 }
 
 export async function chaveamento() {
@@ -335,7 +335,7 @@ export async function chaveamento() {
       }))
       .filter((f) => f.jogos.length > 0);
     return { fonte: data._cached ? 'cache' : 'api', fases };
-  }, () => mock.mockChaveamento);
+  });
 }
 
 export async function elenco() {
@@ -361,5 +361,5 @@ export async function elenco() {
     const brazilId = await resolveBrazilId();
     const data = await apiGet(`/teams/${brazilId}`, {}, CACHE_TTL.squad, 'elenco');
     return { fonte: data._cached ? 'cache' : 'api', jogadores: ordenarElenco((data.squad || []).map(mapPlayer)) };
-  }, () => mock.mockElenco);
+  });
 }
