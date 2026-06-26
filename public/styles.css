@@ -88,8 +88,9 @@ body {
 .hero-sub strong { color: var(--yellow); }
 
 .hero-marquee { margin-top: 50px; overflow: hidden; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 12px 0; }
-.marquee-track { display: flex; white-space: nowrap; animation: marquee 22s linear infinite; }
-.marquee-track span { font-family: 'Anton', sans-serif; font-size: 26px; color: var(--yellow); letter-spacing: 3px; padding-right: 20px; }
+.marquee-track { display: flex; width: max-content; animation: marquee 60s linear infinite; }
+.marquee-group { display: flex; flex-shrink: 0; }
+.marquee-group span { font-family: 'Anton', sans-serif; font-size: 26px; color: var(--yellow); letter-spacing: 3px; padding-right: 20px; white-space: nowrap; }
 
 /* ---------- layout ---------- */
 .container { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; padding: 60px clamp(20px, 5vw, 40px) 80px; }
