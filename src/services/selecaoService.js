@@ -1,5 +1,6 @@
 import { apiGet } from './footballData.js';
 import { apiSportsGet } from './apiSports.js';
+import { getFotosBrasil } from './fotos.js';
 import { config, CACHE_TTL } from '../config.js';
 
 const { worldCupCode, worldCupId } = config;
@@ -340,26 +341,22 @@ export async function chaveamento() {
 
 export async function elenco() {
   return withDemoFallback(async () => {
-    // Preferência: API-Football (tem foto + número da camisa).
-    if (config.apiFootball.key) {
-      const data = await apiSportsGet('/players/squads', { team: config.apiFootball.brazilTeamId }, CACHE_TTL.squad, 'elenco-af');
-      const players = data.response?.[0]?.players ?? [];
-      if (players.length) {
-        // Corrige a posição usando a football-data (mais precisa); se não casar o nome, mantém a da API-Football.
-        const posMap = await footballDataPositions().catch(() => ({}));
-        const jogadores = players.map((p) => {
-          const base = mapPlayerAF(p);
-          const chave = normalizar(p.name);
-          // prioridade: football-data (geral) -> correção manual (casos conhecidos) -> API-Football
-          const posicao = posMap[chave] || CORRECAO_POSICAO[chave] || base.posicao;
-          return { ...base, posicao };
-        });
-        return { fonte: data._cached ? 'cache' : 'api', jogadores: ordenarElenco(jogadores) };
-      }
-    }
-    // Fallback: football-data.org (sem foto).
+    // Squad (nome, posição, idade) vem da football-data — fonte estável.
     const brazilId = await resolveBrazilId();
     const data = await apiGet(`/teams/${brazilId}`, {}, CACHE_TTL.squad, 'elenco');
-    return { fonte: data._cached ? 'cache' : 'api', jogadores: ordenarElenco((data.squad || []).map(mapPlayer)) };
+    const jogadores = (data.squad || []).map(mapPlayer);
+
+    // Enriquece com a FOTO do TheSportsDB (casando pelo nome). Se falhar, segue sem foto.
+    try {
+      const fotos = await getFotosBrasil(jogadores.map((j) => j.nome));
+      jogadores.forEach((j) => {
+        const foto = fotos[normalizar(j.nome)];
+        if (foto) j.foto = foto;
+      });
+    } catch (e) {
+      console.warn(`[elenco] fotos indisponíveis: ${e.message}`);
+    }
+
+    return { fonte: data._cached ? 'cache' : 'api', jogadores: ordenarElenco(jogadores) };
   });
 }
