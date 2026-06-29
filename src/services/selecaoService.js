@@ -282,15 +282,22 @@ export async function aoVivo() {
   });
 }
 
+// Busca os artilheiros da Copa UMA vez, com uma única chave de cache compartilhada
+// entre a seção de artilheiros e a de gols da seleção — assim as duas nunca divergem.
+// limite alto para capturar todos os brasileiros; depois cada função filtra só o Brasil.
+async function fetchScorersBrasil() {
+  const brazilId = await resolveBrazilId();
+  const data = await apiGet(`/competitions/${worldCupCode}/scorers`, { limit: 300 }, CACHE_TTL.scorers, 'scorers-v2');
+  const brasileiros = (data.scorers || [])
+    .filter((s) => s.team?.id === brazilId)
+    .map((s) => mapScorer(s, brazilId));
+  return { brazilId, cached: data._cached, brasileiros };
+}
+
 export async function artilheiros() {
   return withDemoFallback(async () => {
-    const brazilId = await resolveBrazilId();
-    // limite alto para capturar todos os brasileiros, depois filtra só o Brasil.
-    const data = await apiGet(`/competitions/${worldCupCode}/scorers`, { limit: 50 }, CACHE_TTL.scorers, 'scorers-50');
-    const artilheiros = (data.scorers || [])
-      .filter((s) => s.team?.id === brazilId)
-      .map((s) => mapScorer(s, brazilId));
-    return { fonte: data._cached ? 'cache' : 'api', artilheiros };
+    const { cached, brasileiros } = await fetchScorersBrasil();
+    return { fonte: cached ? 'cache' : 'api', artilheiros: brasileiros };
   });
 }
 
@@ -300,11 +307,8 @@ export async function golsDaSelecao() {
     const totalGols = matches
       .filter((m) => m.status === 'FINISHED')
       .reduce((s, m) => s + golsDoBrasilNoJogo(m, brazilId), 0);
-    const scorers = await apiGet(`/competitions/${worldCupCode}/scorers`, { limit: 20 }, CACHE_TTL.scorers, 'scorers-20');
-    const marcadores = (scorers.scorers || [])
-      .filter((s) => s.team?.id === brazilId)
-      .map((s) => mapScorer(s, brazilId));
-    return { fonte: scorers._cached ? 'cache' : 'api', totalGols, marcadores };
+    const { cached, brasileiros } = await fetchScorersBrasil();
+    return { fonte: cached ? 'cache' : 'api', totalGols, marcadores: brasileiros };
   });
 }
 
