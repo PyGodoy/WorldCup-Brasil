@@ -135,6 +135,41 @@ function mapMatchBracket(m, brazilId) {
   };
 }
 
+// Alinha uma rodada do mata-mata à rodada anterior, seguindo o chaveamento:
+// o jogo k da próxima fase é alimentado pelo par de jogos (2k, 2k+1) da fase anterior.
+// Ancoramos pelos confrontos já definidos (pelo id das seleções) e preenchemos os
+// indefinidos ("A definir") nos espaços restantes, preservando a ordem por id.
+function alinharRodada(prev, cur) {
+  const slots = new Array(cur.length).fill(null);
+  const usados = new Set();
+
+  // ids das seleções de cada par da fase anterior (vencedores em potencial)
+  const idsPorPar = [];
+  for (let i = 0; i < prev.length; i += 2) {
+    const ids = new Set();
+    [prev[i], prev[i + 1]].filter(Boolean).forEach((j) => {
+      [j.mandante, j.visitante].forEach((t) => { if (t?.id) ids.add(t.id); });
+    });
+    idsPorPar.push(ids);
+  }
+
+  // passo 1: encaixa cada jogo já definido no slot do par que o alimentou
+  idsPorPar.forEach((ids, slot) => {
+    if (slot >= slots.length) return;
+    const j = cur.findIndex((m, k) =>
+      !usados.has(k) && [m.mandante, m.visitante].some((t) => t?.id && ids.has(t.id)));
+    if (j !== -1) { slots[slot] = cur[j]; usados.add(j); }
+  });
+
+  // passo 2: preenche os slots vazios com os jogos restantes (em ordem de id)
+  const restantes = cur.filter((_, k) => !usados.has(k));
+  let r = 0;
+  for (let s = 0; s < slots.length && r < restantes.length; s++) {
+    if (!slots[s]) slots[s] = restantes[r++];
+  }
+  return slots.filter(Boolean);
+}
+
 const mapStandingRow = (r, brazilId) => ({
   posicao: r.position,
   time: ptNome(r.team),
@@ -330,14 +365,28 @@ export async function chaveamento() {
     const data = await apiGet(`/competitions/${worldCupCode}/matches`, {}, CACHE_TTL.standings, 'chaveamento');
     const matches = data.matches || [];
     const ORDEM = ['LAST_32', 'LAST_16', 'QUARTER_FINALS', 'SEMI_FINALS', 'THIRD_PLACE', 'FINAL'];
+
+    // jogos de cada fase, mapeados e ordenados por id (base do chaveamento)
+    const porFase = {};
+    for (const stage of ORDEM) {
+      porFase[stage] = matches
+        .filter((m) => m.stage === stage)
+        .sort((a, b) => a.id - b.id)
+        .map((m) => mapMatchBracket(m, brazilId));
+    }
+
+    // Alinha cada rodada à anterior seguindo o vencedor de cada par de confrontos,
+    // para que cada card fique na frente do confronto que o originou. A disputa de
+    // 3º lugar fica fora dessa cadeia (é jogo único, alimentado pelos perdedores da semi).
+    const CADEIA = ['LAST_32', 'LAST_16', 'QUARTER_FINALS', 'SEMI_FINALS', 'FINAL'];
+    for (let i = 1; i < CADEIA.length; i++) {
+      const prev = porFase[CADEIA[i - 1]];
+      const cur = porFase[CADEIA[i]];
+      if (prev?.length && cur?.length) porFase[CADEIA[i]] = alinharRodada(prev, cur);
+    }
+
     const fases = ORDEM
-      .map((stage) => ({
-        fase: STAGE_PT[stage] ?? stage,
-        jogos: matches
-          .filter((m) => m.stage === stage)
-          .sort((a, b) => a.id - b.id) // ordem do chaveamento (mais próxima da sequência da chave)
-          .map((m) => mapMatchBracket(m, brazilId)),
-      }))
+      .map((stage) => ({ fase: STAGE_PT[stage] ?? stage, jogos: porFase[stage] }))
       .filter((f) => f.jogos.length > 0);
     return { fonte: data._cached ? 'cache' : 'api', fases };
   });
